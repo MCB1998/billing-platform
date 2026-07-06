@@ -5,6 +5,11 @@ spring:
   application:
     name: customer-service
 
+  # Default locale for messages (e.g. validation) when a request sends no
+  # Accept-Language header. Requests that do send one are still honored (i18n).
+  web:
+    locale: en
+
   # --- Default/dev operation: H2 in-memory DB (no Docker needed) ---
   # MODE=PostgreSQL makes H2 behave as close to Postgres as possible,
   # so the difference to real operation stays small.
