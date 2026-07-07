@@ -1,0 +1,24 @@
+# Local development infrastructure for the billing platform.
+# Database-per-service: each service gets its own PostgreSQL instance.
+# The credentials here are for LOCAL DEV ONLY - in real environments they come
+# from environment variables / a secrets manager (never committed).
+services:
+  customer-db:
+    image: postgres:16-alpine
+    container_name: billing-customer-db
+    environment:
+      POSTGRES_DB: customer
+      POSTGRES_USER: customer
+      POSTGRES_PASSWORD: customer
+    ports:
+      - "5432:5432"
+    volumes:
+      - customer-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U customer -d customer"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  customer-db-data:
