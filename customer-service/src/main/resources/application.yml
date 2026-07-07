@@ -10,6 +10,11 @@ spring:
   web:
     locale: en
 
+  # Flyway manages the schema only for the postgres profile (application-postgres.yml).
+  # The default H2 dev/test setup builds the schema via Hibernate + schema.sql instead.
+  flyway:
+    enabled: false
+
   # --- Default/dev operation: H2 in-memory DB (no Docker needed) ---
   # MODE=PostgreSQL makes H2 behave as close to Postgres as possible,
   # so the difference to real operation stays small.
