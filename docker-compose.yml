@@ -20,5 +20,23 @@ services:
       timeout: 3s
       retries: 5
 
+  invoice-db:
+    image: postgres:16-alpine
+    container_name: billing-invoice-db
+    environment:
+      POSTGRES_DB: invoice
+      POSTGRES_USER: invoice
+      POSTGRES_PASSWORD: invoice
+    ports:
+      - "5433:5432"
+    volumes:
+      - invoice-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U invoice -d invoice"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   customer-db-data:
+  invoice-db-data:
