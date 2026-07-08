@@ -8,6 +8,7 @@ import com.mcb.billing.invoice.exception.InactiveCustomerException;
 import com.mcb.billing.invoice.exception.InvoiceNotFoundException;
 import com.mcb.billing.invoice.exception.UnknownCustomerException;
 import com.mcb.billing.invoice.mapper.InvoiceMapper;
+import com.mcb.billing.invoice.messaging.InvoiceEventPublisher;
 import com.mcb.billing.invoice.repository.InvoiceRepository;
 import com.mcb.billing.invoice.web.dto.CreateInvoiceRequestDTO;
 import com.mcb.billing.invoice.web.dto.InvoiceResponseDTO;
@@ -28,15 +29,18 @@ public class InvoiceService {
     private final InvoiceMapper mapper;
     private final InvoiceNumberGenerator numberGenerator;
     private final CustomerClient customerClient;
+    private final InvoiceEventPublisher eventPublisher;
 
     public InvoiceService(InvoiceRepository repository,
                           InvoiceMapper mapper,
                           InvoiceNumberGenerator numberGenerator,
-                          CustomerClient customerClient) {
+                          CustomerClient customerClient,
+                          InvoiceEventPublisher eventPublisher) {
         this.repository = repository;
         this.mapper = mapper;
         this.numberGenerator = numberGenerator;
         this.customerClient = customerClient;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -61,6 +65,7 @@ public class InvoiceService {
     public InvoiceResponseDTO issueInvoice(String invoiceNumber) {
         Invoice invoice = requireInvoice(invoiceNumber);
         invoice.issue();
+        eventPublisher.publishInvoiceIssued(invoice);
         return mapper.toResponse(invoice);
     }
 

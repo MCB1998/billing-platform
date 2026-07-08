@@ -37,6 +37,24 @@ services:
       timeout: 3s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: billing-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: billing
+      RABBITMQ_DEFAULT_PASS: billing
+    ports:
+      - "5672:5672"      # AMQP protocol
+      - "15672:15672"    # management UI: http://localhost:15672
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   customer-db-data:
   invoice-db-data:
+  rabbitmq-data:

@@ -2,6 +2,7 @@ package com.mcb.billing.invoice.service;
 
 import com.mcb.billing.invoice.client.CustomerClient;
 import com.mcb.billing.invoice.client.CustomerDTO;
+import com.mcb.billing.invoice.messaging.InvoiceEventPublisher;
 import com.mcb.billing.invoice.domain.InvoiceStatus;
 import com.mcb.billing.invoice.exception.InactiveCustomerException;
 import com.mcb.billing.invoice.exception.InvalidInvoiceStateException;
@@ -39,6 +40,9 @@ class InvoiceServiceTest {
 
     @MockBean
     CustomerClient customerClient;
+
+    @MockBean
+    InvoiceEventPublisher eventPublisher;   // don't publish to a real broker in tests
 
     private CreateInvoiceRequestDTO request(String customerNumber) {
         return new CreateInvoiceRequestDTO(customerNumber, "EUR", LocalDate.now().plusDays(30),
