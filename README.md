@@ -21,16 +21,17 @@ flowchart LR
     admin -->|REST| cs["customer-service<br/>Java · Spring Boot"]
     cs --> csdb[("PostgreSQL<br/>customer-db")]
 
+    admin -->|REST| inv["invoice-service<br/>Java · Spring Boot"]
+    inv --> invdb[("PostgreSQL<br/>invoice-db")]
+    inv -->|Feign / sync| cs
+
     %% Planned services (not yet implemented)
     gw["api-gateway<br/>(planned)"]
-    inv["invoice-service<br/>(planned)"]
-    invdb[("PostgreSQL")]
     notif["notification-service<br/>Kotlin · (planned)"]
     mq[["RabbitMQ"]]
 
     gw -.->|routes| cs
-    inv -.->|Feign / sync| cs
-    inv -.-> invdb
+    gw -.->|routes| inv
     inv -.->|events| mq
     mq -.->|events| notif
 ```
@@ -62,6 +63,22 @@ Manages customer master data. Customers are addressed by their business key
 Errors are returned as RFC 7807 `application/problem+json` (e.g. `404` unknown
 customer, `409` duplicate email, `400` validation errors).
 
+### invoice-service
+
+Manages invoices with line items. On creation it calls the customer-service (via
+Feign) to validate the customer, and it keeps its total in sync with its items.
+Addressed by the business key `invoiceNumber` (e.g. `INV-00001`).
+
+| Method | Path                              | Description                               |
+|--------|-----------------------------------|-------------------------------------------|
+| `POST` | `/invoices`                       | Create a DRAFT invoice (`201` + Location) |
+| `POST` | `/invoices/{invoiceNumber}/issue` | Issue an invoice (`DRAFT` → `ISSUED`)     |
+| `GET`  | `/invoices/{invoiceNumber}`       | Get a single invoice                      |
+| `GET`  | `/invoices`                       | List all invoices                         |
+
+Errors as `problem+json` too (e.g. `422` unknown/inactive customer, `409` invalid
+status transition, `503` customer-service unavailable).
+
 ## Getting started
 
 **Prerequisites:** JDK 17 and Docker (only needed for the PostgreSQL profile).
@@ -80,7 +97,7 @@ cd customer-service
 ### Run on PostgreSQL
 
 ```bash
-docker compose up -d          # from the repo root: starts the customer-db container
+docker compose up -d          # from the repo root: starts the PostgreSQL containers
 cd customer-service
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=postgres
 ```
@@ -118,6 +135,7 @@ billing-platform/
 │   ├── src/main/java/...        # domain, repository, service, mapper, web, exception
 │   ├── src/main/resources/      # application[-postgres].yml, db/migration (Flyway)
 │   └── src/test/java/...        # service, web (@WebMvcTest), Testcontainers IT
+├── invoice-service/             # Invoicing microservice (calls customer-service via Feign)
 ├── docs/adr/                    # Architecture Decision Records
 ├── docker-compose.yml           # local infrastructure (PostgreSQL)
 └── .github/workflows/ci.yml     # CI: build + tests on every push and PR
@@ -134,8 +152,6 @@ Key decisions are recorded as ADRs:
 
 ## Roadmap
 
-- **invoice-service** — invoices with line items; calls customer-service via
-  **Feign** (synchronous), own PostgreSQL database.
 - **notification-service** (Kotlin) — reacts to `InvoiceIssued` events over
   **RabbitMQ** (asynchronous).
 - **api-gateway** (Spring Cloud Gateway) — single entry point.
