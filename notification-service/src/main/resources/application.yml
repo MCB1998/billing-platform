@@ -1,30 +1,28 @@
 server:
-  port: 8082                     # invoice-service listens on port 8082 (customer-service uses 8081)
+  port: 8083                     # notification-service listens on port 8083
 
 spring:
   application:
-    name: invoice-service
+    name: notification-service
 
-  # Default locale for messages (e.g. validation) when a request sends no
-  # Accept-Language header. Requests that do send one are still honored (i18n).
+  # English default for messages when a request sends no Accept-Language header.
   web:
     locale: en
 
   # Flyway manages the schema only for the postgres profile (application-postgres.yml).
-  # The default H2 dev/test setup builds the schema via Hibernate instead.
   flyway:
     enabled: false
 
   # --- Default/dev operation: H2 in-memory DB (no Docker needed) ---
   datasource:
-    url: jdbc:h2:mem:invoices;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    url: jdbc:h2:mem:notifications;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
     driver-class-name: org.h2.Driver
     username: sa
     password: ""
 
   jpa:
     hibernate:
-      ddl-auto: create-drop      # generate schema from entities on startup (dev only!)
+      ddl-auto: create-drop
     show-sql: true
     properties:
       hibernate:
@@ -42,16 +40,14 @@ spring:
     username: billing
     password: billing
 
-# Base URL of the customer-service, used by the Feign client.
-customer-service:
-  url: http://localhost:8081
-
-# Messaging topology (shared naming with the notification-service consumer).
+# Messaging topology - the same names are used by the invoice-service publisher.
 billing:
   messaging:
     exchange: billing.events
     invoice-issued-routing-key: invoice.issued
+    invoice-notifications-queue: invoice-notifications
 
+# Swagger UI (interactive API docs): http://localhost:8083/swagger-ui.html
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
