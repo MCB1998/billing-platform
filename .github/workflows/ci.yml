@@ -9,9 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: customer-service
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -23,5 +20,10 @@ jobs:
           java-version: '17'
           cache: maven
 
-      - name: Build and test
+      - name: Build and test customer-service
+        working-directory: customer-service
+        run: ./mvnw -B verify
+
+      - name: Build and test invoice-service
+        working-directory: invoice-service
         run: ./mvnw -B verify
