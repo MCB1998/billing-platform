@@ -37,6 +37,23 @@ services:
       timeout: 3s
       retries: 5
 
+  notification-db:
+    image: postgres:16-alpine
+    container_name: billing-notification-db
+    environment:
+      POSTGRES_DB: notification
+      POSTGRES_USER: notification
+      POSTGRES_PASSWORD: notification
+    ports:
+      - "5434:5432"
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notification -d notification"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: billing-rabbitmq
@@ -57,4 +74,5 @@ services:
 volumes:
   customer-db-data:
   invoice-db-data:
+  notification-db-data:
   rabbitmq-data:
