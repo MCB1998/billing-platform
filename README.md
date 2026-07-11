@@ -24,24 +24,23 @@ flowchart LR
     admin -->|REST| inv["invoice-service<br/>Java · Spring Boot"]
     inv --> invdb[("PostgreSQL<br/>invoice-db")]
     inv -->|Feign / sync| cs
+    inv -->|events| mq[["RabbitMQ"]]
+    mq -->|events| notif["notification-service<br/>Kotlin · Spring Boot"]
+    notif --> notifdb[("PostgreSQL<br/>notification-db")]
 
     %% Planned services (not yet implemented)
     gw["api-gateway<br/>(planned)"]
-    notif["notification-service<br/>Kotlin · (planned)"]
-    mq[["RabbitMQ"]]
-
     gw -.->|routes| cs
     gw -.->|routes| inv
-    inv -.->|events| mq
-    mq -.->|events| notif
 ```
 
 Solid lines are implemented; dashed lines/nodes are planned (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
-Java 17 · Spring Boot 3.3 · Spring Data JPA / Hibernate · PostgreSQL · Flyway ·
-H2 (dev/tests) · Bean Validation · springdoc / OpenAPI · JUnit 5 · Mockito ·
+Java 17 · **Kotlin** · Spring Boot 3.3 · Spring Data JPA / Hibernate · PostgreSQL ·
+Flyway · H2 (dev/tests) · **RabbitMQ** (Spring AMQP) · Spring Cloud OpenFeign ·
+Bean Validation · springdoc / OpenAPI · JUnit 5 · Mockito · Awaitility ·
 Testcontainers · Docker · GitHub Actions.
 
 ## Services
@@ -79,6 +78,21 @@ Addressed by the business key `invoiceNumber` (e.g. `INV-00001`).
 Errors as `problem+json` too (e.g. `422` unknown/inactive customer, `409` invalid
 status transition, `503` customer-service unavailable).
 
+On `issue()` the invoice-service also **publishes an `InvoiceIssued` event** to
+RabbitMQ (see [ADR-0005](docs/adr/0005-async-events-for-notifications.md)).
+
+### notification-service
+
+Written in **Kotlin**. It consumes `InvoiceIssued` events from RabbitMQ
+(asynchronously — it is not on the invoice's critical path) and records a
+notification per event. Delivery is at-least-once, so the consumer is **idempotent**,
+keyed on the event's `eventId` (see
+[ADR-0006](docs/adr/0006-idempotent-consumer.md)).
+
+| Method | Path             | Description                             |
+|--------|------------------|-----------------------------------------|
+| `GET`  | `/notifications` | List recorded notifications (newest first) |
+
 ## Getting started
 
 **Prerequisites:** JDK 17 and Docker (only needed for the PostgreSQL profile).
@@ -97,13 +111,18 @@ cd customer-service
 ### Run on PostgreSQL
 
 ```bash
-docker compose up -d          # from the repo root: starts the PostgreSQL containers
+docker compose up -d          # from the repo root: starts the PostgreSQL databases + RabbitMQ
 cd customer-service
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=postgres
 ```
 
 On the `postgres` profile, Flyway applies the migrations and Hibernate runs with
 `ddl-auto=validate`.
+
+The notification-service is event-driven: start it (it consumes from RabbitMQ), then
+issue an invoice in the invoice-service and watch a notification appear at
+`GET http://localhost:8083/notifications`. The RabbitMQ management UI is at
+http://localhost:15672 (user `billing` / `billing`).
 
 ### Run the tests
 
@@ -123,9 +142,13 @@ A layered test pyramid:
   validation and the `@RestControllerAdvice` error mapping.
 - **Integration test** (Testcontainers + real PostgreSQL) — Flyway migration,
   `validate` and persistence against the production engine.
+- **End-to-end async test** (notification-service) — Testcontainers spins up **both**
+  a real PostgreSQL and a real RabbitMQ; a published event flows through the broker,
+  the `@RabbitListener` consumes it and a row is recorded. Awaitility handles the
+  asynchronous wait, and a duplicate delivery is asserted to be recorded only once.
 
-> The Testcontainers test skips on a Windows host where Docker Desktop's default
-> socket is not exposed; it runs in CI (Linux) and from a WSL shell.
+> The Testcontainers tests skip on a Windows host where Docker Desktop's default
+> socket is not exposed; they run in CI (Linux) and from a WSL shell.
 
 ## Project structure
 
@@ -136,8 +159,9 @@ billing-platform/
 │   ├── src/main/resources/      # application[-postgres].yml, db/migration (Flyway)
 │   └── src/test/java/...        # service, web (@WebMvcTest), Testcontainers IT
 ├── invoice-service/             # Invoicing microservice (calls customer-service via Feign)
+├── notification-service/        # Kotlin; consumes InvoiceIssued events over RabbitMQ
 ├── docs/adr/                    # Architecture Decision Records
-├── docker-compose.yml           # local infrastructure (PostgreSQL)
+├── docker-compose.yml           # local infrastructure (PostgreSQL + RabbitMQ)
 └── .github/workflows/ci.yml     # CI: build + tests on every push and PR
 ```
 
@@ -149,11 +173,12 @@ Key decisions are recorded as ADRs:
 - [ADR-0002 — Database-per-service](docs/adr/0002-database-per-service.md)
 - [ADR-0003 — Server-generated customer numbers](docs/adr/0003-server-generated-customer-numbers.md)
 - [ADR-0004 — Flyway for PostgreSQL, Hibernate for H2](docs/adr/0004-flyway-for-postgres-only.md)
+- [ADR-0005 — Asynchronous events for notifications](docs/adr/0005-async-events-for-notifications.md)
+- [ADR-0006 — Idempotent consumer](docs/adr/0006-idempotent-consumer.md)
+- [ADR-0007 — Kotlin for the notification-service](docs/adr/0007-kotlin-for-notification-service.md)
 
 ## Roadmap
 
-- **notification-service** (Kotlin) — reacts to `InvoiceIssued` events over
-  **RabbitMQ** (asynchronous).
 - **api-gateway** (Spring Cloud Gateway) — single entry point.
 - **Security** — JWT authentication/authorization at the gateway.
 - **Observability** — metrics and structured logging.
