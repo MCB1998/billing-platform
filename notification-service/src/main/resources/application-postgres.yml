@@ -1,0 +1,25 @@
+# Applied when the 'postgres' profile is active (e.g. --spring.profiles.active=postgres).
+# Overrides the default H2 setup to run against the PostgreSQL container (docker-compose).
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5434/notification   # host port from docker-compose (notification-db)
+    driver-class-name: org.postgresql.Driver
+    username: notification
+    password: notification                               # dev default; override via env in real envs
+
+  jpa:
+    hibernate:
+      ddl-auto: validate    # schema is owned by Flyway; Hibernate only verifies it matches the entities
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Schema is managed by Flyway (src/main/resources/db/migration) for this profile.
+  flyway:
+    enabled: true
+
+  # No H2 console when running on PostgreSQL.
+  h2:
+    console:
+      enabled: false
