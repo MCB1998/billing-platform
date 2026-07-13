@@ -1,0 +1,13 @@
+server:
+  port: 8080                     # the gateway is the single entry point on port 8080
+
+spring:
+  application:
+    name: api-gateway
+
+# Actuator: expose health and the gateway route table (read-only insight into routing).
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, gateway
