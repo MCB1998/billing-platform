@@ -4,9 +4,37 @@ server:
 spring:
   application:
     name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        # Path stays identical whether a caller hits the service directly or via the
+        # gateway (no prefix, no StripPrefix); the resource paths are already distinct.
+        - id: customer-service
+          uri: ${services.customer}
+          predicates:
+            - Path=/customers/**
+        - id: invoice-service
+          uri: ${services.invoice}
+          predicates:
+            - Path=/invoices/**
+        - id: notification-service
+          uri: ${services.notification}
+          predicates:
+            - Path=/notifications/**
+
+# Downstream targets, externalized so they can be overridden per environment (e.g.
+# service names instead of localhost when running under docker-compose).
+services:
+  customer: http://localhost:8081
+  invoice: http://localhost:8082
+  notification: http://localhost:8083
 
 # Actuator: expose health and the gateway route table (read-only insight into routing).
+# The 'gateway' endpoint is disabled by default, so enable it explicitly.
 management:
+  endpoint:
+    gateway:
+      enabled: true
   endpoints:
     web:
       exposure:
