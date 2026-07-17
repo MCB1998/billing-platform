@@ -176,6 +176,8 @@ Key decisions are recorded as ADRs:
 - [ADR-0005 — Asynchronous events for notifications](docs/adr/0005-async-events-for-notifications.md)
 - [ADR-0006 — Idempotent consumer](docs/adr/0006-idempotent-consumer.md)
 - [ADR-0007 — Kotlin for the notification-service](docs/adr/0007-kotlin-for-notification-service.md)
+- [ADR-0008 — Keycloak as identity provider, gateway as OAuth2 resource server](docs/adr/0008-keycloak-as-identity-provider.md)
+- [ADR-0009 — jwk-set-uri instead of issuer-uri](docs/adr/0009-jwk-set-uri-over-issuer-uri.md)
 
 ## Roadmap
 
