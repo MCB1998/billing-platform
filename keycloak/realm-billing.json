@@ -1,0 +1,37 @@
+{
+  "realm": "billing",
+  "enabled": true,
+  "displayName": "Billing Platform",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "billing-gateway",
+      "name": "Billing gateway client",
+      "description": "Client used to obtain tokens for the billing platform API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false
+    }
+  ],
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Backoffice",
+      "email": "demo@billing.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

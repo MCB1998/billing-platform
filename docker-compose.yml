@@ -71,6 +71,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # Identity provider: issues the JWTs the api-gateway validates. Runs in dev mode
+  # (in-memory database), so the realm is re-imported from realm-billing.json on every
+  # start - that file is the single, reproducible source of realm/client/user setup.
+  # Dev only: a real deployment uses a persistent database and never ships passwords.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: billing-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin      # admin console: http://localhost:8090
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8090:8080"    # 8080 inside the container; the api-gateway owns 8080 on the host
+    volumes:
+      - ./keycloak/realm-billing.json:/opt/keycloak/data/import/realm-billing.json:ro
+
 volumes:
   customer-db-data:
   invoice-db-data:

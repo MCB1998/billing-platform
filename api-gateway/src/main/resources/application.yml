@@ -4,6 +4,15 @@ server:
 spring:
   application:
     name: api-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Keycloak's public keys. Deliberately jwk-set-uri (lazy: fetched on the first
+          # token) rather than issuer-uri, which would do OIDC discovery at startup and
+          # therefore refuse to start whenever Keycloak is down - including in tests/CI.
+          # Trade-off: issuer-uri would also validate the "iss" claim for free.
+          jwk-set-uri: ${keycloak.jwk-set-uri}
   cloud:
     gateway:
       routes:
@@ -28,6 +37,10 @@ services:
   customer: http://localhost:8081
   invoice: http://localhost:8082
   notification: http://localhost:8083
+
+# Identity provider (docker-compose service "keycloak", host port 8090).
+keycloak:
+  jwk-set-uri: http://localhost:8090/realms/billing/protocol/openid-connect/certs
 
 # Actuator: expose health and the gateway route table (read-only insight into routing).
 # The 'gateway' endpoint is disabled by default, so enable it explicitly.
