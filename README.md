@@ -17,33 +17,56 @@ pyramid, containerized infrastructure and CI.
 ```mermaid
 flowchart LR
     admin([Admin / internal callers])
+    kc[["Keycloak<br/>identity provider"]]
 
-    admin -->|REST| cs["customer-service<br/>Java · Spring Boot"]
+    admin -->|1 · get token| kc
+    admin -->|2 · REST + Bearer JWT| gw["api-gateway<br/>Spring Cloud Gateway"]
+    gw -.->|validate JWT via JWKS| kc
+
+    gw -->|routes| cs["customer-service<br/>Java · Spring Boot"]
+    gw -->|routes| inv["invoice-service<br/>Java · Spring Boot"]
+    gw -->|routes| notif["notification-service<br/>Kotlin · Spring Boot"]
+
     cs --> csdb[("PostgreSQL<br/>customer-db")]
-
-    admin -->|REST| inv["invoice-service<br/>Java · Spring Boot"]
     inv --> invdb[("PostgreSQL<br/>invoice-db")]
-    inv -->|Feign / sync| cs
-    inv -->|events| mq[["RabbitMQ"]]
-    mq -->|events| notif["notification-service<br/>Kotlin · Spring Boot"]
     notif --> notifdb[("PostgreSQL<br/>notification-db")]
 
-    %% Planned services (not yet implemented)
-    gw["api-gateway<br/>(planned)"]
-    gw -.->|routes| cs
-    gw -.->|routes| inv
+    inv -->|Feign / sync| cs
+    inv -->|events| mq[["RabbitMQ"]]
+    mq -->|events| notif
 ```
 
-Solid lines are implemented; dashed lines/nodes are planned (see [Roadmap](#roadmap)).
+Callers authenticate at Keycloak, then reach every service through the gateway with a
+Bearer token. Solid lines are the request/event flow; the dashed line is the gateway
+validating tokens against Keycloak's public keys (out of band, not a proxied call).
 
 ## Tech stack
 
 Java 17 · **Kotlin** · Spring Boot 3.3 · Spring Data JPA / Hibernate · PostgreSQL ·
 Flyway · H2 (dev/tests) · **RabbitMQ** (Spring AMQP) · Spring Cloud OpenFeign ·
-Bean Validation · springdoc / OpenAPI · JUnit 5 · Mockito · Awaitility ·
-Testcontainers · Docker · GitHub Actions.
+**Spring Cloud Gateway** (reactive/WebFlux) · **Spring Security / OAuth2 resource
+server** · **Keycloak** (OAuth2 / OIDC) · Bean Validation · springdoc / OpenAPI ·
+JUnit 5 · Mockito · Awaitility · Testcontainers · Docker · GitHub Actions.
 
 ## Services
+
+### api-gateway
+
+The single entry point (port `8080`, reactive Spring Cloud Gateway). It routes to the
+services by path — the path is forwarded **unchanged**, so `/customers/**` →
+customer-service, `/invoices/**` → invoice-service, `/notifications/**` →
+notification-service. Target addresses are externalized, so they can point at container
+names instead of `localhost` under docker-compose.
+
+It is also an **OAuth2 resource server**: every request needs a valid Keycloak-issued
+`Bearer` JWT, or it is rejected with `401` before any proxying — only
+`/actuator/health` stays public. The gateway issues no tokens itself; it just verifies
+signatures against Keycloak's public keys (see
+[ADR-0008](docs/adr/0008-keycloak-as-identity-provider.md) and
+[ADR-0009](docs/adr/0009-jwk-set-uri-over-issuer-uri.md)).
+
+The service endpoints below are reachable directly during local development, or through
+the gateway (same paths) once security is in play.
 
 ### customer-service
 
@@ -111,7 +134,7 @@ cd customer-service
 ### Run on PostgreSQL
 
 ```bash
-docker compose up -d          # from the repo root: starts the PostgreSQL databases + RabbitMQ
+docker compose up -d          # from the repo root: PostgreSQL databases + RabbitMQ + Keycloak
 cd customer-service
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=postgres
 ```
@@ -123,6 +146,26 @@ The notification-service is event-driven: start it (it consumes from RabbitMQ), 
 issue an invoice in the invoice-service and watch a notification appear at
 `GET http://localhost:8083/notifications`. The RabbitMQ management UI is at
 http://localhost:15672 (user `billing` / `billing`).
+
+### Call through the secured gateway
+
+`docker compose up -d` also starts **Keycloak** (http://localhost:8090, admin
+`admin` / `admin`), which imports the `billing` realm from `keycloak/realm-billing.json`
+on startup. Start the gateway (`cd api-gateway && ./mvnw spring-boot:run`) plus the
+services, then go through the gateway on port `8080` with a token:
+
+```bash
+# 1. get a token from Keycloak (test user demo / demo)
+TOKEN=$(curl -s -d grant_type=password -d client_id=billing-gateway \
+  -d username=demo -d password=demo \
+  http://localhost:8090/realms/billing/protocol/openid-connect/token | jq -r .access_token)
+
+# 2. without a token the gateway rejects the request
+curl -i http://localhost:8080/customers                       # -> 401 Unauthorized
+
+# 3. with the token it routes through to the service
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/customers
+```
 
 ### Run the tests
 
@@ -146,6 +189,10 @@ A layered test pyramid:
   a real PostgreSQL and a real RabbitMQ; a published event flows through the broker,
   the `@RabbitListener` consumes it and a row is recorded. Awaitility handles the
   asynchronous wait, and a duplicate delivery is asserted to be recorded only once.
+- **Gateway security tests** (`WebTestClient`) — assert the resource-server rules:
+  unauthenticated requests get `401`, `/actuator/health` stays public, and an
+  authenticated caller (`mockJwt()`) is let through. They run fully offline — no
+  Keycloak, no downstream services.
 
 > The Testcontainers tests skip on a Windows host where Docker Desktop's default
 > socket is not exposed; they run in CI (Linux) and from a WSL shell.
@@ -160,8 +207,10 @@ billing-platform/
 │   └── src/test/java/...        # service, web (@WebMvcTest), Testcontainers IT
 ├── invoice-service/             # Invoicing microservice (calls customer-service via Feign)
 ├── notification-service/        # Kotlin; consumes InvoiceIssued events over RabbitMQ
+├── api-gateway/                 # Spring Cloud Gateway: single entry point, routing + JWT
+├── keycloak/                    # realm-billing.json: realm/client/user as code (dev)
 ├── docs/adr/                    # Architecture Decision Records
-├── docker-compose.yml           # local infrastructure (PostgreSQL + RabbitMQ)
+├── docker-compose.yml           # local infrastructure (PostgreSQL + RabbitMQ + Keycloak)
 └── .github/workflows/ci.yml     # CI: build + tests on every push and PR
 ```
 
@@ -181,6 +230,7 @@ Key decisions are recorded as ADRs:
 
 ## Roadmap
 
-- **api-gateway** (Spring Cloud Gateway) — single entry point.
-- **Security** — JWT authentication/authorization at the gateway.
+- **Role-based authorization** — map Keycloak roles from the token to endpoint
+  permissions (the gateway does authentication today, not yet authorization).
 - **Observability** — metrics and structured logging.
+- **order-service** — an order that triggers billing, as a later extension.
